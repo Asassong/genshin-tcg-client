@@ -118,171 +118,174 @@ class Gcg(QMainWindow):
     def handle_recv(self, datagram: bytes):
         data: str = datagram.decode()
         data: dict = eval(data)
-        if data["message"] == "init_character":
+        message = data["message"]
+        if message == "init_character":
             self.character_zone.add_widget(data["character_name"], data["hp"], data["energy"], data["position"])
-        elif data["message"] == "init_oppo_character":
+        elif message == "init_oppo_character":
             self.oppose_character_zone.add_widget(data["character_name"], data["hp"], data["energy"], data["position"])
-        elif data["message"] == "choose mode":
+        elif message == "choose mode":
             self.socket_send(str({"message": "selected mode", "mode": "Game1"}))
-        elif data["message"] == "send deck":
+        elif message == "send deck":
             config = self.read_json("config.json")
             if self.player_chose_deck is not None:
                 deck = config[self.player_chose_deck]
                 deck_message = {"message": "check deck", "character": deck["character"], "card": deck["card"]}
                 self.socket_send(str(deck_message))
-        elif data["message"] == "change_energy":
+        elif message == "change_energy":
             position = data["position"]
             energy = data["energy"]
             character = self.character_zone.get_character(position)
             character.change_energy(energy)
-        elif data["message"] == "change_oppose_energy":
+        elif message == "change_oppose_energy":
             position = data["position"]
             energy = data["energy"]
             character = self.oppose_character_zone.get_character(position)
             character.change_energy(energy)
-        elif data["message"] == "redraw":
+        elif message == "redraw":
             self.redraw.show()
             self.redraw.raise_()
             self.redraw.add_cards(data["card_name"], data["card_cost"])
-        elif data["message"] == "select_character":
+        elif message == "select_character":
             self.action_state = "select_character"
             self.change_char_button.show()
-        elif data["message"] == "choose_target_character":
+        elif message == "choose_target_character":
             self.action_state = "choose_target"
             self.commit_button.show()
-        elif data["message"] == "player_change_active":
+        elif message == "player_change_active":
             self.character_zone.change_active(data["from_index"], data["to_index"])
-        elif data["message"] == "oppose_change_active":
+        elif message == "oppose_change_active":
             self.oppose_character_zone.change_active(data["from_index"], data["to_index"])
-        elif data["message"] == "add_card":
+        elif message == "add_card":
             self.card_zone.raise_()
             card_name = data["card_name"]
             card_cost = data["card_cost"]
             for index, card in enumerate(card_name):
                 card = card.replace(" ", "")
                 self.card_zone.add_card(card, card_cost[index])
-        elif data["message"] == "remove_card":
+        elif message == "remove_card":
             self.card_zone.remove_card(data["card_index"])
-        elif data["message"] == "reroll":
+        elif message == "reroll":
             self.reroll.show()
             self.reroll.raise_()
             self.reroll.show_dice(data["now_dice"])
-        elif data["message"] == "oppose_card_num":
+        elif message == "oppose_card_num":
             self.oppoCardNum.setText(str(data["num"]))
-        elif data["message"] == "show_dice_num":
+        elif message == "show_dice_num":
             self.diceNum.setText(str(data["num"]))
-        elif data["message"] == "show_oppose_dice_num":
+        elif message == "show_oppose_dice_num":
             self.oppoDiceNum.setText(str(data["num"]))
-        elif data["message"] == "add_dice":
+        elif message == "add_dice":
             for dice in data["dices"]:
                 self.dice_zone.add_dice(dice)
-        elif data["message"] == "clear_dice":
+        elif message == "clear_dice":
             self.dice_zone.clear()
-        elif data["message"] == "action_phase_start":
+        elif message == "action_phase_start":
             self.end_round_button.setEnabled(True)
             self.action_phase_start = True
-        elif data["message"] == "act_end":
+        elif message == "act_end":
             self.end_round_button.setEnabled(False)
             self.action_phase_start = False
-        elif data["message"] == "highlight_dice":
+        elif message == "highlight_dice":
             self.dice_zone.auto_highlight(data["dice_indexes"])
             self.commit_button.show()
             self.commit_button.setEnabled(True)
-        elif data["message"] == "enable_commit":
+        elif message == "enable_commit":
             self.commit_button.setEnabled(True)
-        elif data["message"] == "remove_dice":
+        elif message == "remove_dice":
             self.dice_zone.remove_dice(data["dices"])
-        elif data["message"] == "init_skill":
+        elif message == "init_skill":
             for skill_name, skill_cost in zip(data["skill_name"], data["skill_cost"]):
                 self.skill_zone.add_widget(skill_name, skill_cost)
-        elif data["message"] == "clear_skill":
+        elif message == "clear_skill":
             self.skill_zone.clear()
-        elif data["message"] == "change_application":
+        elif message == "change_application":
             character = self.character_zone.get_character(data["position"])
             character.change_application(data["application"])
-        elif data["message"] == "oppose_change_application":
+        elif message == "oppose_change_application":
             character = self.oppose_character_zone.get_character(data["position"])
             character.change_application(data["application"])
-        elif data["message"] == "change_hp":
+        elif message == "change_hp":
             character = self.character_zone.get_character(data["position"])
             character.change_hp(data["hp"])
-        elif data["message"] == "change_oppose_hp":
+        elif message == "change_oppose_hp":
             character = self.oppose_character_zone.get_character(data["position"])
             character.change_hp(data["hp"])
-        elif data["message"] == "change_equip":
+        elif message == "change_equip":
             character = self.character_zone.get_character(data["position"])
             character.change_equip(data["equip"])
-        elif data["message"] == "change_oppose_equip":
+        elif message == "change_oppose_equip":
             character = self.oppose_character_zone.get_character(data["position"])
             character.change_equip(data["equip"])
-        elif data["message"] == "add_support":
+        elif message == "add_support":
             self.supportZone.add_widget(data["support_name"], data["num"])
-        elif data["message"] == "oppose_add_support":
+        elif message == "oppose_add_support":
             self.oppoSupportZone.add_widget(data["support_name"], data["num"])
-        elif data["message"] == "change_support_count":
+        elif message == "change_support_count":
             self.supportZone.change_support_count(data["support_index"], data["count"])
-        elif data["message"] == "change_oppose_support_count":
+        elif message == "change_oppose_support_count":
             self.oppoSupportZone.change_support_count(data["support_index"], data["count"])
-        elif data["message"] == "change_skill_state":
+        elif message == "change_skill_state":
             self.skill_zone.update_skill_state(data["skill_cost"], data["skill_state"])
-        elif data["message"] == "hide_oppose":
+        elif message == "hide_oppose":
             self.oppoCardNum.hide()
             self.oppoDiceNum.hide()
             self.oppoSupportZone.hide()
             self.oppose_character_zone.hide()
-        elif data["message"] == "show_oppose":
+        elif message == "show_oppose":
             self.oppoCardNum.show()
             self.oppoDiceNum.show()
             self.oppoSupportZone.show()
             self.oppose_character_zone.show()
-        elif data["message"] == "add_summon":
+        elif message == "add_summon":
             self.summonZone.add_widget(data["summon_name"], data["usage"], data["effect"])
-        elif data["message"] == "oppose_add_summon":
+        elif message == "oppose_add_summon":
             self.oppoSummonZone.add_widget(data["summon_name"], data["usage"], data["effect"])
-        elif data["message"] == "change_sumon_usage":
+        elif message == "change_sumon_usage":
             self.summonZone.change_summon_count(data["index"], data["usage"])
-        elif data["message"] == "change_oppose_sumon_usage":
+        elif message == "change_oppose_sumon_usage":
             self.oppoSummonZone.change_summon_count(data["index"], data["usage"])
-        elif data["message"] == "remove_summon":
+        elif message == "remove_summon":
             self.summonZone.remove_widget(data["index"])
-        elif data["message"] == "remove_oppose_summon":
+        elif message == "remove_oppose_summon":
             self.oppoSummonZone.remove_widget(data["index"])
-        elif data["message"] == "add_state":
+        elif message == "add_state":
             if data["type"] == "self":
                 character = self.character_zone.get_character(data["store"])
                 character.self_state.add_widget(data["state_name"], data["state_icon"], data["num"])
             elif data["type"] == "team":
                 self.character_zone.add_team_state(data["state_name"], data["state_icon"], data["num"])
-        elif data["message"] == "oppose_add_state":
+        elif message == "oppose_add_state":
             if data["type"] == "self":
                 character = self.oppose_character_zone.get_character(data["store"])
                 character.self_state.add_widget(data["state_name"], data["state_icon"], data["num"])
             elif data["type"] == "team":
                 self.oppose_character_zone.add_team_state(data["state_name"], data["state_icon"], data["num"])
-        elif data["message"] == "change_state_usage":
+        elif message == "change_state_usage":
             if data["type"] == "self":
                 character = self.character_zone.get_character(data["store"])
                 character.self_state.update_state(data["state_name"], data["num"])
             elif data["type"] == "team":
                 self.character_zone.update_team_state(data["state_name"], data["num"])
-        elif data["message"] == "change_oppose_state_usage":
+        elif message == "change_oppose_state_usage":
             if data["type"] == "self":
                 character = self.oppose_character_zone.get_character(data["store"])
                 character.self_state.update_state(data["state_name"], data["num"])
             elif data["type"] == "team":
                 self.oppose_character_zone.update_team_state(data["state_name"], data["num"])
-        elif data["message"] == "remove_state":
+        elif message == "remove_state":
             if data["type"] == "self":
                 character = self.character_zone.get_character(data["store"])
                 character.self_state.remove_widget(data["state_name"])
             elif data["type"] == "team":
                 self.character_zone.remove_team_state(data["state_name"])
-        elif data["message"] == "remove_oppose_state":
+        elif message == "remove_oppose_state":
             if data["type"] == "self":
                 character = self.oppose_character_zone.get_character(data["store"])
                 character.self_state.remove_widget(data["state_name"])
             elif data["type"] == "team":
                 self.oppose_character_zone.remove_team_state(data["state_name"])
+        elif message == "zero_cost":
+            self.zero_cost()
         # else:
         print("recv", data)
 
@@ -315,6 +318,17 @@ class Gcg(QMainWindow):
                 self.action_state = ""
             self.character_zone.cancel_highlight(index)
             self.change_char_button.hide()
+            
+    def zero_cost(self):
+        if self.action_state == "use_skill":
+            self.skill_zone.choose.set_state(False)
+        elif self.action_state == "play_card" or self.action_state == "element_tuning":
+            self.card_zone.confirm_drag()
+            if self.selectedCard is not None:
+                self.selectedCard.deleteLater()
+                self.selectedCard = None
+        self.commit_button.hide()
+        self.action_state = ""
 
     def commit_operation(self):
         if self.action_state == "cost":
@@ -333,6 +347,7 @@ class Gcg(QMainWindow):
             self.action_state = ""
             self.socket_send(str({"message": "commit_cost", "cost": choose}))
             self.commit_button.hide()
+            self.card_zone.confirm_drag()
             if self.selectedCard is not None:
                 self.selectedCard.deleteLater()
                 self.selectedCard = None
@@ -372,6 +387,7 @@ class Gcg(QMainWindow):
         if x > width * 0.8:
             self.action_state = "element_tuning"
             if selected_card is not None:
+                card.hide()
                 self.socket_send(str({"message": "element_tuning", "card_index": selected_card}))
                 self.commit_button.show()
                 self.commit_button.setEnabled(False)
@@ -381,6 +397,7 @@ class Gcg(QMainWindow):
         else:
             self.action_state = "play_card"
             if selected_card is not None:
+                card.hide()
                 self.socket_send(str({"message": "play_card", "card_index": selected_card}))
                 self.commit_button.show()
                 self.commit_button.setEnabled(False)
@@ -979,7 +996,7 @@ class CardZone(QWidget):
     def __init__(self, parent: Gcg):
         super().__init__(parent)
         self.all_card: list[HandCard] = []
-        self.select_card = None
+        # self.select_card = None
         self.game = parent
         self.be_dragged: Optional[HandCard] = None
         self.be_dragged_index = -1
@@ -1015,14 +1032,14 @@ class CardZone(QWidget):
         self.be_dragged = None
 
     def get_select(self):
-        if self.select_card is not None:
-            return self.all_card.index(self.select_card)
+        if self.be_dragged is not None:
+            return self.be_dragged_index
         else:
             return None
 
     def remove_card(self, index):
-        if self.select_card == self.all_card[index]:
-            self.select_card = None  # 防止变量已删除再设state
+        # if self.be_dragged == self.all_card[index]:
+        #     self.be_dragged = None  # 防止变量已删除再设state
         self.all_card[index].deleteLater()
         self.all_card.pop(index)
         self.auto_resize()
@@ -1298,13 +1315,14 @@ class Skill(QWidget):
         self.skill_image.resize(int(width/2), int(width/2))
         self.skill_cost.resize(int(width * 0.6), int(height/4))
         self.skill_cost.move(int(width/5), int(height*3/4))
-        cost_num = self.lo.count()
-        for index in range(cost_num):
+        cost_num = 0
+        for index in range(self.lo.count()):
             widget = self.lo.itemAt(index).widget()
             if isinstance(widget, Cost):
+                cost_num += 1
                 widget.auto_resize(int(height/4))
         if cost_num == 1:
-            self.lo.setContentsMargins(int(width/5), 0, 0, 0)
+            self.lo.setContentsMargins(int(width * 0.15), 0, 0, 0)
         else:
             self.lo.setContentsMargins(0, 0, 0, 0)
         self.skill_cost.setLayout(self.lo)
