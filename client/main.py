@@ -95,6 +95,7 @@ class Gcg(QMainWindow):
         self.action_phase_start = False
         self.action_state = ""
         self.wait_change_state_obj = None
+        self.selectedCard: Optional[HandCard] = None
         self.resize(1280, 720)
         self.resize_timer = QTimer(self)
         self.resize_timer.setInterval(100)
@@ -185,7 +186,6 @@ class Gcg(QMainWindow):
             self.action_phase_start = False
         elif data["message"] == "highlight_dice":
             self.dice_zone.auto_highlight(data["dice_indexes"])
-            self.action_state = "cost"
             self.commit_button.show()
             self.commit_button.setEnabled(True)
         elif data["message"] == "enable_commit":
@@ -299,6 +299,8 @@ class Gcg(QMainWindow):
                     self.action_state = ""
                     self.dice_zone.auto_clear_highlight()
                     self.commit_button.hide()
+                elif self.action_state == "play_card" or self.action_state == "element_tuning":
+                    self.card_zone.cancel_drag()
                 self.socket_send(str({"message": "cancel"}))
                 self.change_char_button.hide()
 
@@ -307,9 +309,10 @@ class Gcg(QMainWindow):
         if index is not None:
             if self.action_state == "change_character":
                 self.socket_send(str({"message": "change_character", "character": index}))
+                self.action_state = "cost"
             elif self.action_state == "select_character":
                 self.socket_send(str({"message": "selected_character", "character_index": index}))
-            self.action_state = ""
+                self.action_state = ""
             self.character_zone.cancel_highlight(index)
             self.change_char_button.hide()
 
@@ -320,38 +323,25 @@ class Gcg(QMainWindow):
             self.socket_send(str({"message": "commit_cost", "cost": choose}))
             self.commit_button.hide()
         elif self.action_state == "use_skill":
-            choose = self.skill_zone.get_choose()
-            self.action_state = ""
-            self.socket_send(str({"message": "use_skill", "skill_index": choose}))
-            self.commit_button.hide()
-            if isinstance(self.wait_change_state_obj, ClickableLabel):
-                self.wait_change_state_obj.set_state(False)
-                self.wait_change_state_obj = None
-        elif self.action_state == "play_card":
             choose = self.dice_zone.get_choose()
             self.action_state = ""
             self.socket_send(str({"message": "commit_cost", "cost": choose}))
             self.commit_button.hide()
+            self.skill_zone.choose.set_state(False)
+        elif self.action_state == "play_card" or self.action_state == "element_tuning":
+            choose = self.dice_zone.get_choose()
+            self.action_state = ""
+            self.socket_send(str({"message": "commit_cost", "cost": choose}))
+            self.commit_button.hide()
+            if self.selectedCard is not None:
+                self.selectedCard.deleteLater()
+                self.selectedCard = None
         elif self.action_state == "choose_target":
             index = self.character_zone.get_choose_index()
             if index is not None:
                 self.action_state = ""
                 self.socket_send(str({"message": "chose_target_character", "index": index}))
                 self.commit_button.hide()
-
-    def play_card(self):
-        selected_card = self.card_zone.get_select()
-        if selected_card is not None:
-            self.socket_send(str({"message": "play_card", "card_index": selected_card}))
-            self.play_card_button.hide()
-            self.element_tuning_button.hide()
-
-    def element_tuning(self):
-        selected_card = self.card_zone.get_select()
-        if selected_card is not None:
-            self.socket_send(str({"message": "element_tuning", "card_index": selected_card}))
-            self.play_card_button.hide()
-            self.element_tuning_button.hide()
 
     def round_end(self):
         self.socket_send(str({"message": "round_end"}))
@@ -378,16 +368,23 @@ class Gcg(QMainWindow):
         event.accept()
         width = self.width()
         height = self.height()
+        selected_card = self.card_zone.get_select()
         if x > width * 0.8:
             self.action_state = "element_tuning"
-            self.commit_button.show()
-            self.commit_button.setEnabled(False)
+            if selected_card is not None:
+                self.socket_send(str({"message": "element_tuning", "card_index": selected_card}))
+                self.commit_button.show()
+                self.commit_button.setEnabled(False)
+                self.selectedCard = card
         elif y > height * 0.8:
             self.card_zone.cancel_drag()
         else:
             self.action_state = "play_card"
-            self.commit_button.show()
-            self.commit_button.setEnabled(False)
+            if selected_card is not None:
+                self.socket_send(str({"message": "play_card", "card_index": selected_card}))
+                self.commit_button.show()
+                self.commit_button.setEnabled(False)
+                self.selectedCard = card
 
     @staticmethod
     def read_json(file: str) -> dict[str]:
@@ -438,8 +435,8 @@ class Gcg(QMainWindow):
         self.oppoCardNum.resize(int(0.03 * width), int(0.03 * width))
         self.oppoCardNum.setFont(QFont('HYWenHei-85W', int(0.01 * width)))
         self.commit_button.resize(int(width * 0.1), int(height * 0.05))
-        self.commit_button.move(int(width * 0.45), int(height * 0.8))
-        self.commit_button.setFont(QFont('HYWenHei-85W', int(0.01 * width)))
+        self.commit_button.move(int(width * 0.45), int(height * 0.81))
+        self.commit_button.setFont(QFont('HYWenHei-85W', int(0.008 * width)))
         self.character_zone.auto_resize()
         self.oppose_character_zone.auto_resize()
         self.end_round_button.move(int(0.006 * width), int(0.45 * height))
@@ -493,7 +490,7 @@ class CommitButton(QPushButton):
     def __init__(self, parent: Gcg):
         super().__init__(parent)
         self.setObjectName("commit")
-        self.setStyleSheet("#commit{border-image: url(./resources/confirm-icon.png);color: #3b4255}")
+        self.setStyleSheet("#commit{border-image: url(./resources/confirm-icon.png);color: rgb(59, 66, 85)}")
         self.game = parent
 
     def showEvent(self, event) -> None:
@@ -705,7 +702,8 @@ class Redraw(QWidget):
         self.background.setStyleSheet("#redraw{background-color:rgba(0, 0, 0, 127)}")
         self.commit = QPushButton(self)
         self.commit.setObjectName("commit")
-        self.commit.setStyleSheet("#commit{border-image: url(./resources/confirm-icon.png);}")
+        self.commit.setStyleSheet("#commit{border-image: url(./resources/confirm-icon.png);color: rgb(59, 66, 85)}")
+        self.commit.setText("确定")
         self.card_zone = QWidget(self)
         self.lo = QHBoxLayout()
         self.lo.setContentsMargins(0, 0, 0, 0)
@@ -734,7 +732,8 @@ class Redraw(QWidget):
         self.card_zone.resize(int(width * parent_width), int(parent_height * 0.25))
         self.card_zone.move(int(parent_width * (0.5 - width / 2)), int(parent_height * 0.37))
         self.commit.resize(int(parent_width * 0.1), int(parent_height * 0.05))
-        self.commit.move(int(parent_width * 0.45), int(parent_height * 0.8))
+        self.commit.setFont(QFont('HYWenHei-85W', int(0.008 * parent_width)))
+        self.commit.move(int(parent_width * 0.45), int(parent_height * 0.81))
         self.lo.setSpacing(int(parent_width * 0.04))
         for card in self.cards:
             card.auto_resize(int(parent_width * 0.08), int(parent_height * 0.25))
@@ -996,21 +995,7 @@ class CardZone(QWidget):
         if self.game.action_phase_start:
             if event.button() == Qt.MouseButton.LeftButton:
                 self.auto_expand()
-            # obj = self.childAt(event.pos())
-            # if isinstance(obj, ClickableLabel):
-            #     if obj.get_state():
-            #         if self.select_card is not None:
-            #             self.select_card.set_state(False)
-            #         self.select_card = obj
-            #         # cost_message = {"message": "check_card", "card_index": self.get_select()}
-            #         # self.game.socket_send(str(cost_message))
-            #         self.game.play_card_button.show()
-            #         # self.game.gui.play_card.setEnabled(False)
-            #         self.game.element_tuning_button.show()
-            #     else:
-            #         self.select_card = None
-            #         self.game.play_card_button.hide()
-            #         self.game.element_tuning_button.hide()
+
     def record_being_dragged(self, card: HandCard):
         self.be_dragged_index = self.all_card.index(card)
         self.be_dragged = card
@@ -1073,8 +1058,10 @@ class Reroll(QWidget):
         self.dice_zone = AutoResizeWidget(self, 60, "h", "element", True)
         self.commit = QPushButton(self)
         self.commit.setObjectName("commit")
-        self.commit.setStyleSheet("#commit{border-image: url(./resources/confirm-icon.png);}")
+        self.commit.setStyleSheet("#commit{border-image: url(./resources/confirm-icon.png);color: rgb(59, 66, 85);}")
         self.commit.clicked.connect(self.commit_reroll)
+        self.commit.setText("确定")
+        self.scroll_start_state = False
         self.auto_resize()
 
     @staticmethod
@@ -1106,7 +1093,18 @@ class Reroll(QWidget):
         widget_height = self.dice_zone.height()
         self.dice_zone.move(int(parent_width/2 - widget_width/2), int(parent_height/2 - widget_height/2))
         self.commit.resize(int(parent_width * 0.1), int(parent_height * 0.05))
-        self.commit.move(int(parent_width * 0.45), int(parent_height * 0.8))
+        self.commit.move(int(parent_width * 0.45), int(parent_height * 0.81))
+        self.commit.setFont(QFont('HYWenHei-85W', int(0.008 * parent_width)))
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        obj = self.childAt(event.pos())
+        if isinstance(obj, ClickableLabel):
+            self.scroll_start_state = obj.get_state() # 点击时骰子已经改变了状态
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        obj = self.childAt(event.pos())
+        if isinstance(obj, ClickableLabel):
+            obj.set_state(self.scroll_start_state)
 
 class DiceZone(QWidget):
     def __init__(self, parent: Gcg):
@@ -1166,7 +1164,7 @@ class DiceZone(QWidget):
             self.contain_dice[index].set_state(False)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        if self.game.action_state == "cost":
+        if self.game.action_state in ["cost", "play_card", "element_tuning", "use_skill"]:
             self.game.commit_button.setEnabled(False)
             choose_index = self.game.dice_zone.get_choose()
             cost_message = {"message": "check_cost", "cost": choose_index}
@@ -1290,6 +1288,9 @@ class Skill(QWidget):
         self.auto_layout(skill_cost)
         self.auto_resize(self.width(), self.height())
 
+    def set_state(self, value):
+        self.skill_background.set_state(value)
+
     def auto_resize(self, width, height):
         self.resize(width, height)
         self.skill_background.resize(width, width)
@@ -1306,11 +1307,12 @@ class Skill(QWidget):
             self.lo.setContentsMargins(int(width/5), 0, 0, 0)
         else:
             self.lo.setContentsMargins(0, 0, 0, 0)
+        self.skill_cost.setLayout(self.lo)
 
 class SkillZone(QWidget):
     def __init__(self, parent: Gcg):
         super().__init__(parent)
-        self.choose: ClickableLabel|None = None
+        self.choose: Optional[Skill] = None
         self.game = parent
         self.contain_widget = []
         self.skill_state = []
@@ -1363,20 +1365,24 @@ class SkillZone(QWidget):
                 if obj.get_state():
                     if self.choose is not None:
                         try:
-                            obj.set_state(False)
+                            self.choose.set_state(False)
+                            self.game.socket_send(str({"message": "cancel"}))
                         except RuntimeError:  # 对象已删除
                             pass
                     self.choose = obj.parent()
-                    if self.get_choose() is not None:
+                    skill_index = self.get_choose()
+                    if skill_index is not None:
                         if self.skill_state[self.get_choose()]:
                             self.game.commit_button.show()
                             # self.game.commit_button.setEnabled(True)
-                    self.game.wait_change_state_obj = obj
-                    self.game.action_state = "skill"
+                        self.game.action_state = "use_skill"
+                        self.game.socket_send(str({"message": "use_skill", "skill_index": skill_index}))
                 else:
                     self.choose = None
                     self.game.commit_button.hide()
                     self.game.wait_change_state_obj = None
+                    if self.game.action_state == "use_skill":
+                        self.game.socket_send(str({"message": "cancel"}))
                     self.game.action_state = ""
 
 class SupportCard(QFrame):
