@@ -94,8 +94,9 @@ class Gcg(QMainWindow):
         self.setAcceptDrops(True)
         self.action_phase_start = False
         self.action_state = ""
-        self.wait_change_state_obj = None
         self.selectedCard: Optional[HandCard] = None
+        self.choose_target_index = -1
+        self.choose_target_type = ""
         self.resize(1280, 720)
         self.resize_timer = QTimer(self)
         self.resize_timer.setInterval(100)
@@ -112,7 +113,7 @@ class Gcg(QMainWindow):
             self.handle_recv(datagram)
 
     def socket_send(self, info: str):
-        print("send", info, self._server_port)
+        print("send", info)
         self._socket.writeDatagram(info.encode(), self._localhost, self._server_port)
 
     def handle_recv(self, datagram: bytes):
@@ -148,9 +149,23 @@ class Gcg(QMainWindow):
         elif message == "select_character":
             self.action_state = "select_character"
             self.change_char_button.show()
-        elif message == "choose_target_character":
-            self.action_state = "choose_target"
-            self.commit_button.show()
+        elif message == "choose_target":
+            target_type = data["target_type"]
+            self.choose_target_type = target_type
+            if target_type == "character":
+                self.character_zone.enable_choose_target = True
+            elif target_type == "summon":
+                self.summonZone.change_enable_choose_target(True)
+            elif target_type == "support":
+                self.supportZone.change_enable_choose_target(True)
+            elif target_type == "oppose_character":
+                self.oppose_character_zone.enable_choose_target = True
+            elif target_type == "oppose_summon":
+                self.oppoSummonZone.change_enable_choose_target(True)
+            elif target_type == "oppose_support":
+                self.oppoSupportZone.change_enable_choose_target(True)
+            self.commit_button.update_text()
+            self.commit_button.setEnabled(True)
         elif message == "player_change_active":
             self.character_zone.change_active(data["from_index"], data["to_index"])
         elif message == "oppose_change_active":
@@ -286,6 +301,11 @@ class Gcg(QMainWindow):
                 self.oppose_character_zone.remove_team_state(data["state_name"])
         elif message == "zero_cost":
             self.zero_cost()
+        elif message == "block_action":
+            if self.action_state == "play_card" or self.action_state == "element_tuning":
+                self.card_zone.cancel_drag()
+                self.action_state = ""
+                self.commit_button.hide()
         # else:
         print("recv", data)
 
@@ -302,10 +322,16 @@ class Gcg(QMainWindow):
                     self.action_state = ""
                     self.dice_zone.auto_clear_highlight()
                     self.commit_button.hide()
+                    self.socket_send(str({"message": "cancel"}))
                 elif self.action_state == "play_card" or self.action_state == "element_tuning":
                     self.card_zone.cancel_drag()
-                self.socket_send(str({"message": "cancel"}))
-                self.change_char_button.hide()
+                    self.dice_zone.auto_clear_highlight()
+                    self.commit_button.hide()
+                    self.action_state = ""
+                    self.socket_send(str({"message": "cancel"}))
+                elif self.action_state == "change_character":
+                    self.change_char_button.hide()
+                    self.action_state = ""
 
     def choose_character(self):
         index = self.character_zone.get_choose_index()
@@ -331,32 +357,52 @@ class Gcg(QMainWindow):
         self.action_state = ""
 
     def commit_operation(self):
-        if self.action_state == "cost":
-            choose = self.dice_zone.get_choose()
-            self.action_state = ""
-            self.socket_send(str({"message": "commit_cost", "cost": choose}))
-            self.commit_button.hide()
-        elif self.action_state == "use_skill":
-            choose = self.dice_zone.get_choose()
-            self.action_state = ""
-            self.socket_send(str({"message": "commit_cost", "cost": choose}))
-            self.commit_button.hide()
-            self.skill_zone.choose.set_state(False)
-        elif self.action_state == "play_card" or self.action_state == "element_tuning":
-            choose = self.dice_zone.get_choose()
-            self.action_state = ""
-            self.socket_send(str({"message": "commit_cost", "cost": choose}))
-            self.commit_button.hide()
-            self.card_zone.confirm_drag()
-            if self.selectedCard is not None:
-                self.selectedCard.deleteLater()
-                self.selectedCard = None
-        elif self.action_state == "choose_target":
-            index = self.character_zone.get_choose_index()
-            if index is not None:
+        if self.choose_target_type:
+            index = self.choose_target_index
+            if index != -1 and index is not None:
+                self.socket_send(str({"message": "chose_target", "index": index}))
+                if self.choose_target_type == "character":
+                    self.character_zone.enable_choose_target = False
+                    self.character_zone.cancel_highlight(index)
+                elif self.choose_target_type == "summon":
+                    self.summonZone.change_enable_choose_target(False)
+                elif self.choose_target_type == "support":
+                    self.supportZone.change_enable_choose_target(False)
+                elif self.choose_target_type == "oppose_character":
+                    self.oppose_character_zone.enable_choose_target = False
+                    self.oppose_character_zone.cancel_highlight(index)
+                elif self.choose_target_type == "oppose_summon":
+                    self.oppoSummonZone.change_enable_choose_target(False)
+                elif self.choose_target_type == "oppose_support":
+                    self.oppoSupportZone.change_enable_choose_target(False)
+                self.choose_target_type = ""
+                if self.action_state:
+                    self.commit_button.setEnabled(False)
+                    self.commit_button.update_text()
+                else:
+                    self.commit_button.hide()
+                self.choose_target_index = -1
+        else:
+            if self.action_state == "cost":
+                choose = self.dice_zone.get_choose()
                 self.action_state = ""
-                self.socket_send(str({"message": "chose_target_character", "index": index}))
+                self.socket_send(str({"message": "commit_cost", "cost": choose}))
                 self.commit_button.hide()
+            elif self.action_state == "use_skill":
+                choose = self.dice_zone.get_choose()
+                self.action_state = ""
+                self.socket_send(str({"message": "commit_cost", "cost": choose}))
+                self.commit_button.hide()
+                self.skill_zone.choose.set_state(False)
+            elif self.action_state == "play_card" or self.action_state == "element_tuning":
+                choose = self.dice_zone.get_choose()
+                self.action_state = ""
+                self.socket_send(str({"message": "commit_cost", "cost": choose}))
+                self.commit_button.hide()
+                self.card_zone.confirm_drag()
+                if self.selectedCard is not None:
+                    self.selectedCard.deleteLater()
+                    self.selectedCard = None
 
     def round_end(self):
         self.socket_send(str({"message": "round_end"}))
@@ -458,10 +504,10 @@ class Gcg(QMainWindow):
         self.oppose_character_zone.auto_resize()
         self.end_round_button.move(int(0.006 * width), int(0.45 * height))
         self.end_round_button.resize(int(0.1 * height), int(0.1 * height))
-        self.summonZone.move(int(0.15 * width), int(0.52 * height))
-        self.oppoSummonZone.move(int(0.15 * width), int(0.15 * height))
-        self.supportZone.move(int(0.70 * width), int(0.52 * height))
-        self.oppoSupportZone.move(int(0.70 * width), int(0.15 * height))
+        self.summonZone.move(int(0.70 * width), int(0.52 * height))
+        self.oppoSummonZone.move(int(0.70 * width), int(0.15 * height))
+        self.supportZone.move(int(0.15 * width), int(0.52 * height))
+        self.oppoSupportZone.move(int(0.15 * width), int(0.15 * height))
         self.dice_zone.move(int(0.96 * width), int(0.1 * height))
         self.change_char_button.move(int(0.95 * width), int(0.8 * height))
         self.change_char_button.auto_resize()
@@ -510,15 +556,21 @@ class CommitButton(QPushButton):
         self.setStyleSheet("#commit{border-image: url(./resources/confirm-icon.png);color: rgb(59, 66, 85)}")
         self.game = parent
 
-    def showEvent(self, event) -> None:
-        if self.game.action_state == "play_card":
-            self.setText("打出卡牌")
-        elif self.game.action_state == "element_tuning":
-            self.setText("元素调和")
-        elif self.game.action_state == "use_skill":
-            self.setText("使用技能")
-        else:
+    def update_text(self):
+        if self.game.choose_target_type:
             self.setText("确定")
+        else:
+            if self.game.action_state == "play_card":
+                self.setText("打出卡牌")
+            elif self.game.action_state == "element_tuning":
+                self.setText("元素调和")
+            elif self.game.action_state == "use_skill":
+                self.setText("使用技能")
+            else:
+                self.setText("确定")
+
+    def showEvent(self, event) -> None:
+        self.update_text()
 
 class CharacterZone(QWidget):
     def __init__(self, parent: Gcg, zone_type):
@@ -528,6 +580,7 @@ class CharacterZone(QWidget):
         self.active: Optional[CharacterCard] = None
         self.game = parent
         self.choose: Optional[CharacterCard] = None
+        self.enable_choose_target = False
         self.auto_resize()
 
     def add_widget(self, character_name: str, hp: int, energy: tuple[int, int], index=None):
@@ -602,6 +655,7 @@ class CharacterZone(QWidget):
 
     def cancel_highlight(self, index):
         self.characters[index].picture.set_state(False)
+        self.choose = None
 
     def add_team_state(self, state_name, icon_name, count):
         if self.active is not None:
@@ -618,16 +672,16 @@ class CharacterZone(QWidget):
     def mousePressEvent(self, event: QMouseEvent) -> None:
         obj = self.childAt(event.pos())
         if isinstance(obj, ClickableLabel) and isinstance(obj.parent(), CharacterCard):
-            last_chose = None
             if self.choose is not None:
-                last_chose = self.choose
+                if self.choose is not obj.parent():
+                    self.choose.picture.set_state(False)
             if obj.get_state():
                 self.choose = obj.parent()
             else:
                 self.choose = None
-            if last_chose is not None:
-                last_chose.picture.set_state(False)
-            if self.zone_type == "player" and self.game.action_phase_start:
+            if self.enable_choose_target:
+                self.game.choose_target_index = self.get_choose_index()
+            elif self.zone_type == "player" and self.game.action_phase_start:
                 if (self.choose is not self.active) and (self.choose is not None):
                     self.game.action_state = "change_character"
                     self.game.change_char_button.show()
@@ -701,10 +755,10 @@ class CharacterCard(QFrame):
         self.hp.resize(int(width / 4), int(height * 0.04 / 0.31))
         self.hp.move(0, int(height * 0.03 / 0.31))
         self.hp.setFont(QFont('HYWenHei-85W', int(height * 0.02 / 0.31)))
-        self.equip.auto_resize(int(height * 0.03 / 0.31))
+        self.equip.auto_resize(int(height * 0.04 / 0.31))
         self.equip.move(0, int(height * 0.07 / 0.31))
-        self.energy.move(int(width * 0.8), int(height * 0.06 / 0.31))
-        self.energy.auto_resize(int(height * 0.03 / 0.31))
+        self.energy.move(int(width * 0.79), int(height * 0.06 / 0.31))
+        self.energy.auto_resize(int(height * 0.04 / 0.31))
         self.self_state.move(0, int(height * 0.25 / 0.31))
         self.self_state.auto_resize(int(height * 0.03 / 0.31))
         self.team_state.move(0, int(height * 0.28 / 0.31))
@@ -879,21 +933,6 @@ class HandCard(QLabel):
     def mousePressEvent(self, e):
         super().mousePressEvent(e)
 
-    # def mouseMoveEvent(self, event) -> None:
-    #     print("move", event.button())
-    #     if event.button() == Qt.MouseButton.NoButton and self.dragEnabled:
-    #         mimeData = QMimeData()
-    #         drag = QDrag(self)
-    #         drag.setMimeData(mimeData)
-    #         drag.setHotSpot(event.pose())
-    #         drag.exec(Qt.DropAction.TargetMoveAction)
-    #     else:
-    #         event.ignore()
-    #
-    # def mousePressEvent(self, event) -> None:
-    #     print("press", event.button())
-    #     event.ignore()
-
 class Cost(QWidget):
     def __init__(self, parent, cost_type, cost):
         super().__init__(parent)
@@ -927,10 +966,13 @@ class State(QWidget):
         self.image_name = image_name
         self.image_label = QLabel(self)
         self.image_label.setScaledContents(True)
+        self.init_card_picture(image_name)
         self.number_label = QLabel(self)
         self.change_count(number)
 
     def init_card_picture(self, picture_name):
+        default = QPixmap("./resources/state/state.png")
+        self.image_label.setPixmap(default)
         picture = QPixmap("./resources/state/%s.png" % picture_name)
         self.image_label.setPixmap(picture)
 
@@ -941,7 +983,7 @@ class State(QWidget):
         self.resize(width, width)
         self.image_label.resize(width, width)
         self.number_label.resize(int(width/2), int(width/2))
-        self.number_label.move(int(width/2), int(width/2))
+        self.number_label.move(int(width*0.6), int(width/2))
         self.number_label.setStyleSheet("font-family: 'HYWenHei-85W'; color: white; font-size: %dpx;" % (int(width/3)))
 
 class StateManager(QWidget):
@@ -1014,10 +1056,12 @@ class CardZone(QWidget):
                 self.auto_expand()
 
     def record_being_dragged(self, card: HandCard):
-        self.be_dragged_index = self.all_card.index(card)
-        self.be_dragged = card
-        self.all_card.pop(self.be_dragged_index)
-        self.auto_resize()
+        if card in self.all_card:
+            self.be_dragged_index = self.all_card.index(card)
+            self.be_dragged = card
+            self.all_card.pop(self.be_dragged_index)
+            self.auto_resize()
+
 
     def cancel_drag(self):
         self.be_dragged.setParent(self)
@@ -1392,27 +1436,32 @@ class SkillZone(QWidget):
                     if skill_index is not None:
                         if self.skill_state[self.get_choose()]:
                             self.game.commit_button.show()
-                            # self.game.commit_button.setEnabled(True)
-                        self.game.action_state = "use_skill"
-                        self.game.socket_send(str({"message": "use_skill", "skill_index": skill_index}))
+                            self.game.action_state = "use_skill"
+                            self.game.socket_send(str({"message": "use_skill", "skill_index": skill_index}))
                 else:
                     self.choose = None
                     self.game.commit_button.hide()
-                    self.game.wait_change_state_obj = None
+                    self.game.dice_zone.auto_clear_highlight()
                     if self.game.action_state == "use_skill":
                         self.game.socket_send(str({"message": "cancel"}))
-                    self.game.action_state = ""
+                        self.game.action_state = ""
 
 class SupportCard(QFrame):
     def __init__(self, parent, support_name, count):
         super().__init__(parent)
         self.pic = QLabel(self)
-        self.pic.setScaledContents(True)
+        self.pic.setScaledContents(True)  # 原神是把图片按宽度缩放，高度保留底边。如果用scaledToWidth模糊的根本没法看，有空再说。
         self.init_card_picture(support_name)
         self.counter = QLabel(self)
         self.counter.setStyleSheet('color: white')
         self.counter.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.counter.setText(count)
+        self.tick = QLabel(self)
+        self.tick.setScaledContents(True)
+        self.tick.setPixmap(QPixmap("./resources/tick.png"))
+        self.tick.hide()
+        self.be_chose = False
+        self.can_be_chose = False
 
     def init_card_picture(self, picture_name):
         picture_name = picture_name.replace(" ", "")
@@ -1422,15 +1471,32 @@ class SupportCard(QFrame):
     def change_count(self, value):
         self.counter.setText(value)
 
+    def change_state(self):
+        self.set_state(not self.be_chose)
+
+    def set_state(self, value: bool):
+        self.be_chose = value
+        if self.be_chose:
+            self.tick.show()
+        else:
+            self.tick.hide()
+
     def auto_resize(self, width, height):
         self.resize(width, height)
         self.pic.resize(width, height)
         self.counter.resize(int(width/5), int(height/5))
         self.counter.setFont(QFont('HYWenHei-85W', int(width/6)))
+        self.tick.resize(width, height)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if self.can_be_chose:
+            self.change_state()
+        event.ignore()
 
 class SupportZone(QWidget):
-    def __init__(self, parent):
+    def __init__(self, parent: Gcg):
         super().__init__(parent)
+        self.game = parent
         self.lo = QGridLayout()
         self.lo.setContentsMargins(0, 0, 0, 0)
         self.lo.setRowStretch(0, 1)
@@ -1438,6 +1504,7 @@ class SupportZone(QWidget):
         self.lo.setColumnStretch(0, 1)
         self.lo.setColumnStretch(1, 1)
         self.contain_widget: list[SupportCard] = []
+        self.enable_choose_target = False
         self.auto_resize()
 
     def add_widget(self, support_name, count):
@@ -1460,13 +1527,33 @@ class SupportZone(QWidget):
     def change_support_count(self, index, value):
         self.contain_widget[index].change_count(value)
 
+    def change_enable_choose_target(self, value):
+        self.enable_choose_target = value
+        if self.enable_choose_target:
+            for support in self.contain_widget:
+                support.can_be_chose = True
+        else:
+            for support in self.contain_widget:
+                support.can_be_chose = False
+                support.set_state(False)
+
     def auto_resize(self):
         parent_height = self.parent().height()
         parent_width = self.parent().width()
-        self.resize(int(parent_width * 0.11), int(parent_height * 0.31))
+        self.resize(int(parent_width * 0.15), int(parent_height * 0.31))
         self.lo.setSpacing(int(parent_height * 0.01))
         for support in self.contain_widget:
-            support.auto_resize(parent_width * 0.05, parent_height * 0.15)
+            support.auto_resize(int(parent_width * 0.07), int(parent_height * 0.15))
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        obj = self.childAt(event.pos())
+        if isinstance(obj, SupportCard):
+            if self.enable_choose_target:
+                if obj in self.contain_widget:
+                    if obj.be_chose:
+                        self.game.choose_target_index = self.contain_widget.index(obj)
+                    else:
+                        self.game.choose_target_index = -1
 
 class SummonCard(QWidget):
     def __init__(self, parent, support_name, count, effect):
@@ -1484,6 +1571,12 @@ class SummonCard(QWidget):
         self.effect_value.setStyleSheet('color: white')
         self.effect_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.init_effect(effect)
+        self.tick = QLabel(self)
+        self.tick.setScaledContents(True)
+        self.tick.setPixmap(QPixmap("./resources/tick.png"))
+        self.tick.hide()
+        self.be_chose = False
+        self.can_be_chose = False
 
     def init_card_picture(self, picture_name):
         picture_name = picture_name.replace(" ", "")
@@ -1492,16 +1585,25 @@ class SummonCard(QWidget):
 
     def init_effect(self, effect):
         if effect:
-            effect_type, effect_value = next(iter(effect[0].items()))
+            effect_type, effect_value = effect["effect_type"].lower(), effect["effect_value"]
             if effect_type == "heal":
                 picture = QPixmap("./resources/images/heal-icon.png")
                 self.effect_type.setPixmap(picture)
                 self.effect_value.setText(str(effect_value))
-            elif effect_type == "damage":
-                damage_type, damage_value = next(iter(effect_value.items()))
-                picture = QPixmap("./resources/elements/%s.png" % damage_type.lower())
+            else:
+                picture = QPixmap("./resources/elements/%s.png" % effect_type)
                 self.effect_type.setPixmap(picture)
-                self.effect_value.setText(str(damage_value))
+                self.effect_value.setText(str(effect_value))
+
+    def change_state(self):
+        self.set_state(not self.be_chose)
+
+    def set_state(self, value: bool):
+        self.be_chose = value
+        if self.be_chose:
+            self.tick.show()
+        else:
+            self.tick.hide()
 
     def change_usage(self, num):
         self.counter.setText(str(num))
@@ -1512,15 +1614,22 @@ class SummonCard(QWidget):
         self.counter.resize(int(width/5), int(height/5))
         self.counter.setFont(QFont('HYWenHei-85W', int(width/6)))
         self.counter.move(int(width * 4 / 5), 0)
-        self.effect_type.resize(int(width * 0.3), int(width * 0.3))
-        self.effect_type.move(0, int(width * 0.7))
-        self.effect_value.resize(int(width * 0.3), int(width * 0.3))
-        self.effect_value.move(0, int(width * 0.7))
+        self.effect_type.resize(int(width * 0.4), int(width * 0.4))
+        self.effect_type.move(0, int(width * 0.72))
+        self.effect_value.resize(int(width * 0.4), int(width * 0.4))
+        self.effect_value.move(0, int(width * 0.75))
         self.effect_value.setFont(QFont('HYWenHei-85W', int(width/5)))
+        self.tick.resize(width, height)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if self.can_be_chose:
+            self.change_state()
+        event.ignore()
 
 class SummonZone(QWidget):
-    def __init__(self, parent):
+    def __init__(self, parent: Gcg):
         super().__init__(parent)
+        self.game = parent
         self.lo = QGridLayout()
         self.lo.setContentsMargins(0, 0, 0, 0)
         self.lo.setRowStretch(0, 1)
@@ -1528,6 +1637,7 @@ class SummonZone(QWidget):
         self.lo.setColumnStretch(0, 1)
         self.lo.setColumnStretch(1, 1)
         self.contain_widget: list[SummonCard] = []
+        self.enable_choose_target = False
         
     def add_widget(self, summon_name, count, effect):
         new_summon = SummonCard(self, summon_name, count, effect)
@@ -1556,13 +1666,33 @@ class SummonZone(QWidget):
     def change_summon_count(self, index, value):
         self.contain_widget[index].change_usage(value)
 
+    def change_enable_choose_target(self, value):
+        self.enable_choose_target = value
+        if self.enable_choose_target:
+            for summon in self.contain_widget:
+                summon.can_be_chose = True
+        else:
+            for summon in self.contain_widget:
+                summon.can_be_chose = False
+                summon.set_state(False)
+
     def auto_resize(self):
         parent_height = self.parent().height()
         parent_width = self.parent().width()
-        self.resize(int(parent_width * 0.11), int(parent_height * 0.31))
+        self.resize(int(parent_width * 0.15), int(parent_height * 0.31))
         self.lo.setSpacing(int(parent_height * 0.01))
         for summon in self.contain_widget:
-            summon.auto_resize(parent_width * 0.05, parent_height * 0.15)
+            summon.auto_resize(int(parent_width * 0.07), int(parent_height * 0.15))
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        obj = self.childAt(event.pos())
+        if isinstance(obj, SummonCard):
+            if self.enable_choose_target:
+                if obj in self.contain_widget:
+                    if obj.be_chose:
+                        self.game.choose_target_index = self.contain_widget.index(obj)
+                    else:
+                        self.game.choose_target_index = -1
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
