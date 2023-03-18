@@ -15,6 +15,8 @@
 
 * 完善收发信息
 
+* 完善取消操作
+
 * 技能可用指示(show if skill is usable)
 
 * 卡牌可用指示(show if card is usable)
