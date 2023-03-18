@@ -255,14 +255,22 @@ class Gcg(QMainWindow):
             self.summonZone.add_widget(data["summon_name"], data["usage"], data["effect"])
         elif message == "oppose_add_summon":
             self.oppoSummonZone.add_widget(data["summon_name"], data["usage"], data["effect"])
-        elif message == "change_sumon_usage":
+        elif message == "change_summon_usage":
             self.summonZone.change_summon_count(data["index"], data["usage"])
-        elif message == "change_oppose_sumon_usage":
+        elif message == "change_oppose_summon_usage":
             self.oppoSummonZone.change_summon_count(data["index"], data["usage"])
         elif message == "remove_summon":
             self.summonZone.remove_widget(data["index"])
         elif message == "remove_oppose_summon":
             self.oppoSummonZone.remove_widget(data["index"])
+        elif message == "change_support_usage":
+            self.supportZone.change_support_count(data["index"], data["usage"])
+        elif message == "change_oppose_support_usage":
+            self.oppoSupportZone.change_support_count(data["index"], data["usage"])
+        elif message == "remove_support":
+            self.supportZone.remove_widget(data["index"])
+        elif message == "remove_oppose_summon":
+            self.oppoSupportZone.remove_widget(data["index"])
         elif message == "add_state":
             if data["type"] == "self":
                 character = self.character_zone.get_character(data["store"])
@@ -1469,7 +1477,7 @@ class SupportCard(QFrame):
         self.pic.setPixmap(picture)
 
     def change_count(self, value):
-        self.counter.setText(value)
+        self.counter.setText(str(value))
 
     def change_state(self):
         self.set_state(not self.be_chose)
